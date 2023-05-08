@@ -1,0 +1,83 @@
+library(keras)
+
+# Load the CIFAR-100 dataset
+cifar100 <- dataset_cifar100()
+x_train <- cifar100$train$x
+y_train <- cifar100$train$y
+x_test <- cifar100$test$x
+y_test <- cifar100$test$y
+
+# Normalize pixel values to be between 0 and 1
+x_train <- x_train / 255
+x_test <- x_test / 255
+
+# Convert class vectors to binary class matrices
+num_classes <- 100
+y_train <- to_categorical(y_train, num_classes)
+y_test <- to_categorical(y_test, num_classes)
+
+# Define data augmentation generator
+datagen <- image_data_generator(
+  rotation_range = 15,
+  width_shift_range = 0.1,
+  height_shift_range = 0.1,
+  horizontal_flip = TRUE,
+  fill_mode = 'nearest'
+)
+
+# Define the CNN model architecture
+model <- keras_model_sequential()
+model %>%
+  layer_conv_2d(filters = 32, kernel_size = c(3, 3), activation = "relu", input_shape = c(32, 32, 3), padding = "same") %>%
+  layer_batch_normalization() %>%
+  layer_conv_2d(filters = 32, kernel_size = c(3, 3), activation = "relu", padding = "same") %>%
+  layer_batch_normalization() %>%
+  layer_max_pooling_2d(pool_size = c(2, 2)) %>%
+  layer_dropout(rate = 0.2) %>%
+  layer_conv_2d(filters = 64, kernel_size = c(3, 3), activation = "relu", padding = "same") %>%
+  layer_batch_normalization() %>%
+  layer_conv_2d(filters = 64, kernel_size = c(3, 3), activation = "relu", padding = "same") %>%
+  layer_batch_normalization() %>%
+  layer_max_pooling_2d(pool_size = c(2, 2)) %>%
+  layer_dropout(rate = 0.3) %>%
+  layer_conv_2d(filters = 128, kernel_size = c(3, 3), activation = "relu", padding = "same") %>%
+  layer_batch_normalization() %>%
+  layer_conv_2d(filters = 128, kernel_size = c(3, 3), activation = "relu", padding = "same") %>%
+  layer_batch_normalization() %>%
+  layer_max_pooling_2d(pool_size = c(2, 2)) %>%
+  layer_dropout(rate = 0.4) %>%
+  layer_flatten() %>%
+  layer_dense(units = 512, activation = "relu") %>%
+  layer_batch_normalization() %>%
+  layer_dropout(rate = 0.5) %>%
+  layer_dense(units = num_classes, activation = "softmax")
+
+# Define the optimizer
+optimizer <- tf$keras$optimizers$Adam(learning_rate = 0.001)
+
+# Define callbacks
+early_stopping <- callback_early_stopping(patience = 20)
+reduce_lr <- callback_reduce_lr_on_plateau(factor = 0.5, patience = 10)
+
+# Compile the model
+model %>% compile(
+  loss = "categorical_crossentropy",
+  optimizer = optimizer,
+  metrics = c("accuracy")
+)
+
+# Train the model
+early_stopping <- callback_early_stopping(patience = 20)
+
+history <- model %>% fit(
+  x_train, y_train,
+  batch_size = 128,
+  epochs = 100,
+  validation_data = list(x_test, y_test),
+  callbacks = list(early_stopping)
+)
+
+# Evaluate the model on the test set
+score <- model %>% evaluate(x_test, y_test, verbose = 0)
+cat("Test loss:", score[[1]], "\n")
+cat("Test accuracy:", score[[2]], "\n")
